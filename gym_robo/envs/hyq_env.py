@@ -36,7 +36,7 @@ class HyQEnv(gym.Env):
         self.__last_done_info = None
         now = datetime.now()
         table_name = f'run_{now.strftime("%d_%m_%Y__%H_%M_%S")}'
-        self.__logger = HyQLogger(table_name, "hyq_log.db")
+        self.__logger = HyQLogger(table_name, "hyq_log1.db")
         # self.reset()
 
     def step(self, action: numpy.ndarray) -> Tuple[numpy.ndarray, float, bool, dict]:

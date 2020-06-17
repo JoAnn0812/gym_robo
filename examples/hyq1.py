@@ -14,7 +14,7 @@ from typing import Type
 #                       0.436332, 1.22173, -0.349066,
 #                       0.436332, 0.872665, 2.44346])
 def main(args=None):
-    env: HyQEnv = gym.make('HyQ-v0')
+    env: HyQEnv = gym.make('HyQ-v1')
     action_space: Type[Box] = env.action_space
     done = False
     for _ in range(10):

@@ -119,28 +119,35 @@ class HyQTask2:
             if self.is_validation:
                 print(f'Failed to reach {self.target_coords}')
             return True, info_dict
+        info_dict['state'] = HyQState.InProgress
         return False, info_dict
 
     def compute_reward(self, obs: HyQObservation, state: HyQState, time_step: int = -1) -> Tuple[float, Dict]:
         #Gaits graph reward shaping
         reward = 0.0
+        count = 0
         if time_step % self.cycle_len == 0:
             self.step = 0
-        if 0 <= self.step < 10 or 50 <= self.step < 60:
+        if (0 <= self.step < 10) or (50 <= self.step < 60):
             if ('lh_foot_collision_1', 'ground_collision') and ('lf_foot_collision_1', 'ground_collision') and ('rf_foot_collision_1', 'ground_collision') and ('rh_foot_collision_1', 'ground_collision') in obs.contact_pairs:
-                reward +=2
+                reward = 2
             else:
-                reward -=1
-        if 10 <= self.step < 50:
+                reward = -1
+        elif 10 <= self.step < 50:
             if (('lh_foot_collision_1', 'ground_collision') and ('rf_foot_collision_1', 'ground_collision') in obs.contact_pairs) and (('lf_foot_collision_1', 'ground_collision') and ('rh_foot_collision_1', 'ground_collision') not in obs.contact_pairs):
-                reward +=2
+                reward = 2
             else:
-                reward -=1
-        if 60 <= self.step < 100:
+                reward = -1
+        elif 60 <= self.step < 100:
             if (('rh_foot_collision_1', 'ground_collision') and ('lf_foot_collision_1', 'ground_collision') in obs.contact_pairs) and (('rf_foot_collision_1', 'ground_collision') and ('lh_foot_collision_1', 'ground_collision') not in obs.contact_pairs):
-                reward +=2
+                reward = 2
             else:
-                reward -=1
+                reward = -1
+        for contact in obs.contact_pairs:
+            if contact[0].endswith('foot_collision_1'):
+                count+=1
+        if count != 4 and count !=2:
+            reward-=2
         self.step +=1
         
         current_coords = numpy.array([obs.pose.position.x, obs.pose.position.y, obs.pose.position.z])
