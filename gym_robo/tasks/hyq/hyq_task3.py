@@ -1,12 +1,14 @@
 from collections import deque
 from typing import Dict, Tuple
 import numpy
+import gym
 from gym.spaces import Box
 import os
 import math
 from HyQPy import HyQObservation
 from gym_robo.utils import hyq_obs_to_numpy
 from .common import HyQState
+
 
 
 def quaternion_to_euler(w, x, y, z) -> Tuple[float, float, float]:
@@ -27,7 +29,7 @@ def quaternion_to_euler(w, x, y, z) -> Tuple[float, float, float]:
     return roll, pitch, yaw
 
 
-class HyQTask1:
+class HyQTask3:
     def __init__(self, robot, max_time_step: int = 1000, accepted_dist_to_bounds=0.01,
                  accepted_error=0.01, reach_target_bonus_reward=0.0, reach_bounds_penalty=0.0, fall_penalty=0.0,
                  episodes_per_goal=1, goal_buffer_size=20, goal_from_buffer_prob=0.0, num_adjacent_goals=0, is_validation=False,
@@ -105,6 +107,15 @@ class HyQTask1:
         self.__reset_count: int = 0
         self.__reach_count: int = 0
 
+        self.foots4_count = 0
+        self.lfoots2_count = 0
+        self.rfoots2_count = 0
+        self.previous = [0,0,0,0]
+        self.foots4_checker = True   
+        self.foots2_checker = True
+        self.lfoots2_checker = True
+        self.rfoots2_checker = True
+
     def is_done(self, obs: HyQObservation, observation_space: Box, time_step: int = -1) -> Tuple[bool, Dict]:
         failed, state = self.__is_failed(obs, observation_space, time_step)
         info_dict = {'state': state}
@@ -113,60 +124,149 @@ class HyQTask1:
             if self.is_validation:
                 print(f'Failed to reach {self.target_coords}')
             return True, info_dict
+        info_dict['state'] = HyQState.InProgress
+        return False, info_dict
 
-        current_coords = numpy.array([obs.pose.position.x, obs.pose.position.y, obs.pose.position.z])
-        # As long as any coordinate is out of acceptance range, we are not done
-        for i in range(3):
-            if abs(self.target_coords[i] - current_coords[i]) > self.accepted_error:
-                info_dict['state'] = HyQState.InProgress
-                return False, info_dict
-        # If all coordinates within acceptance range AND time step within limits, we are done
-        info_dict['state'] = HyQState.Reached
-        info_dict['step_count'] = time_step
-        print(f'Reached destination, target coords: {self.target_coords}, current coords: {current_coords}, time step: {time_step}')
-        self.__reach_count += 1
-        if self.is_validation:
-            print(f'Reach count: {self.__reach_count}')
+    def compute_reward(self, obs: HyQObservation, state: HyQState, time_step: int = -1) -> Tuple[float, Dict]:
+        #Gaits graph reward shaping
+        reward = 0.0
+        foot_flag=[0,0,0,0]
+        if time_step == 1:
+            self.foots4_count = 0
+            self.lfoots2_count = 0
+            self.rfoots2_count = 0
+            self.previous = [0,0,0,0]
+            self.foots4_checker = True           #checker to check it use the correct foot
+            self.foots2_checker = True
+            self.lfoots2_checker = True
+            self.rfoots2_checker = True
+        for foot in obs.contact_pairs:
+            if foot[0] == 'rh_foot_collision_1':
+                foot_flag[0] = 1
+            elif foot[0] == 'rf_foot_collision_1':
+                foot_flag[1] = 1
+            elif foot[0] == 'lf_foot_collision_1':
+                foot_flag[2] = 1
+            elif foot[0] == 'lh_foot_collision_1':
+                foot_flag[3] = 1
 
-        if self.continuous_run:
-            return False, info_dict
+        #4 foots touched floor
+        if foot_flag == [1,1,1,1]:
+            #count the number of step for [1,1,1,1]
+            if foot_flag == self.previous:
+                self.foots4_count += 1
+            else:
+                self.foots4_count = 1
+                self.rfoots2_count = 0
+                self.lfoots2_count = 0
+            #Get reward = 2 for 10 steps of [1,1,1,1], else reward = -2
+            if self.foots4_count == 1:
+                if self.foots4_checker:
+                    reward = 4
+                else:
+                    reward = -2
+                self.foots4_checker = False
+                self.foots2_checker = False
+            elif 1 < self.foots4_count <= 10:
+                reward = 2
+                if self.foots4_count == 10:
+                    self.foots2_checker = True
+            else:
+                reward = -2
+        
+        #2 foots(RF & LH) touched floor
+        elif foot_flag == [0,1,0,1]:
+            #count the number of step for [0,1,0,1]
+            if foot_flag == self.previous:
+                self.rfoots2_count += 1
+            else:
+                self.rfoots2_count = 1
+                self.foots4_count = 0
+                self.lfoots2_count = 0
+            #Get reward = 2 for 40 steps of [0,1,0,1], else reward = -2
+            if rfoots2_count == 1:
+                if self.foots2_checker:
+                    if self.rfoots2_checker:
+                        reward = 4
+                    else:
+                        reward = -2
+                else:
+                    reward = -2
+                self.foots4_checker = False
+                self.foots2_checker = False
+                self.rfoots2_checker = False
+                self.lfoots2_checker = False
+            elif 1 < self.rfoots2_count <= 40:
+                reward = 2
+                if self.rfoots2_count == 40:
+                    self.foots4_checker = True
+                    self.lfoots2_checker = True
+            else:
+                reward = -2
+
+        #2 foots(LF & RH) touched floor
+        elif foot_flag == [1,0,1,0]:
+            #count the number of step for [1,0,1,0]
+            if foot_flag == self.previous:
+                self.lfoots2_count += 1
+            else:
+                self.lfoots2_count = 1
+                self.foots4_count = 0
+                self.rfoots2_count = 0
+            #Get reward = 2 for 40 steps of [1,0,1,0], else reward = -2
+            if self.lfoots2_count == 1:
+                if self.foots2_checker:
+                    if self.lfoots2_checker:
+                        reward = 4
+                    else:
+                        reward = -2
+                else:
+                    reward = -2
+                self.foots4_checker = False
+                self.foots2_checker = False
+                self.rfoots2_checker = False
+                self.lfoots2_checker = False
+            elif 1 < self.lfoots2_count <= 40:
+                reward = 2
+                if self.lfoots2_count == 40:
+                    self.foots4_checker = True
+                    self.rfoots2_checker = True
+            else:
+                reward = -2
+
         else:
-            return True, info_dict
+            reward = -4
+            self.foots4_checker = True
+            self.foots2_checker = True
+            self.lfoots2_checker = True
+            self.rfoots2_checker = True
+            self.foots4_count = 0
+            self.lfoots2_count = 0
+            self.rfoots2_count = 0
 
-    def compute_reward(self, obs: HyQObservation, state: HyQState, *args) -> Tuple[float, Dict]:
-
+        self.previous = foot_flag
+        
         current_coords = numpy.array([obs.pose.position.x, obs.pose.position.y, obs.pose.position.z])
 
         assert state != HyQState.Undefined, f'State cannot be undefined, please check logic'
 
-        reward = self.__calc_dist_change(self.previous_coords, current_coords)
+        reward1 = self.__calc_dist_change(self.previous_coords, current_coords)
 
-        # normalise rewards
-        mag_target = numpy.linalg.norm(self.initial_coords - self.target_coords)
-        normalised_reward = reward / mag_target
-
-        # Scale up normalised reward slightly such that the total reward is between 0 and 10 by default instead of between 0 and 1
-        if self.norm_rew_scaling is not None:
-            normalised_reward *= self.norm_rew_scaling
-        else:
-            normalised_reward *= 10
-
+        if reward1 > 0:
+            reward1 = 0
         # Scale up reward so that it is not so small if not normalised
-        normal_scaled_reward = reward * 100
+        normal_scaled_reward = reward1 * 100
+
+        reward = reward + normal_scaled_reward
 
         # Calculate current distance to goal (for information purposes only)
         dist = numpy.linalg.norm(current_coords - self.target_coords)
 
-        reward_info = {'normalised_reward': normalised_reward,
+        reward_info = {'normalised_reward': 0.0,
                        'normal_reward': normal_scaled_reward,
                        'distance_to_goal': dist,
                        'target_coords': self.target_coords,
                        'current_coords': current_coords}
-
-        if self.norm_rew_scaling is not None:
-            reward = normalised_reward
-        else:
-            reward = normal_scaled_reward
 
         # Calculate exponential reward component
         if self.exp_rew_scaling is not None:
@@ -260,8 +360,10 @@ class HyQTask1:
         # Efficient euclidean distance calculation by numpy, most likely uses vector instructions
         diff_abs_init = numpy.linalg.norm(coords_init - self.target_coords)
         diff_abs_next = numpy.linalg.norm(coords_next - self.target_coords)
-
-        return diff_abs_init - diff_abs_next
+        if diff_abs_next > 0.10:
+            return diff_abs_init - diff_abs_next
+        else:
+            return 0.0
 
     def __calc_exponential_reward(self, coords_init: numpy.ndarray, coords_next: numpy.ndarray) -> float:
         def calc_cum_reward(dist: float, scaling=5.0):
@@ -337,4 +439,4 @@ class HyQTask1:
         return pitch_penalty_factor * yaw_penalty_factor * height_penalty_factor
 
     def __get_target_coords(self) -> numpy.ndarray:
-        return numpy.array([5.0, 0.0, 0.5])
+        return numpy.array([0.0, 0.0, 0.5])

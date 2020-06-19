@@ -114,6 +114,10 @@ class HyQTask2:
     def is_done(self, obs: HyQObservation, observation_space: Box, time_step: int = -1) -> Tuple[bool, Dict]:
         failed, state = self.__is_failed(obs, observation_space, time_step)
         info_dict = {'state': state}
+        if state == HyQState.Fallen:
+            return False, info_dict
+        if state == HyQState.ApproachJointLimits:
+            return False, info_dict
         if failed:
             # self.fail_points.append((self.target_coords, self.target_coords_ik))
             if self.is_validation:
@@ -130,24 +134,24 @@ class HyQTask2:
             self.step = 0
         if (0 <= self.step < 10) or (50 <= self.step < 60):
             if ('lh_foot_collision_1', 'ground_collision') and ('lf_foot_collision_1', 'ground_collision') and ('rf_foot_collision_1', 'ground_collision') and ('rh_foot_collision_1', 'ground_collision') in obs.contact_pairs:
-                reward = 2
+                reward = 2.0
             else:
-                reward = -1
+                reward = -1.0
         elif 10 <= self.step < 50:
             if (('lh_foot_collision_1', 'ground_collision') and ('rf_foot_collision_1', 'ground_collision') in obs.contact_pairs) and (('lf_foot_collision_1', 'ground_collision') and ('rh_foot_collision_1', 'ground_collision') not in obs.contact_pairs):
-                reward = 2
+                reward = 2.0
             else:
-                reward = -1
+                reward = -1.0
         elif 60 <= self.step < 100:
             if (('rh_foot_collision_1', 'ground_collision') and ('lf_foot_collision_1', 'ground_collision') in obs.contact_pairs) and (('rf_foot_collision_1', 'ground_collision') and ('lh_foot_collision_1', 'ground_collision') not in obs.contact_pairs):
-                reward = 2
+                reward = 2.0
             else:
-                reward = -1
+                reward = -1.0
         for contact in obs.contact_pairs:
             if contact[0].endswith('foot_collision_1'):
                 count+=1
         if count != 4 and count !=2:
-            reward-=2
+            reward-=2.0
         self.step +=1
         
         current_coords = numpy.array([obs.pose.position.x, obs.pose.position.y, obs.pose.position.z])
@@ -157,7 +161,7 @@ class HyQTask2:
         reward1 = self.__calc_dist_change(self.previous_coords, current_coords)
 
         if reward1 > 0:
-            reward1 = 0
+            reward1 = 0.0
         # Scale up reward so that it is not so small if not normalised
         normal_scaled_reward = reward1 * 100
 
@@ -195,7 +199,8 @@ class HyQTask2:
 
         # Scaling reward penalties
         total_penalty_factor = self.__calc_rew_penalty_scale(obs.pose, reward_info)
-        reward *= total_penalty_factor
+        if reward > 0:
+            reward *= total_penalty_factor
 
         # Check if it has approached any joint limits
         if state == HyQState.ApproachJointLimits:
@@ -239,13 +244,25 @@ class HyQTask2:
         joint_angles = numpy.array(obs.joint_positions)
         upper_bound = observation_space.high[:12]  # First 12 values are the joint angles
         lower_bound = observation_space.low[:12]
-        min_dist_to_upper_bound = min(abs(joint_angles - upper_bound))
-        min_dist_to_lower_bound = min(abs(joint_angles - lower_bound))
+        min_dist_to_upper_bound = numpy.amin(abs(joint_angles - upper_bound))
+        min_dist_to_lower_bound = numpy.amin(abs(joint_angles - lower_bound))
         # self.accepted_dist_to_bounds is basically how close to the joint limits can the joints go,
         # i.e. limit of 1.57 with accepted dist of 0.1, then the joint can only go until 1.47
-        if min_dist_to_lower_bound < self.accepted_dist_to_bounds or min_dist_to_upper_bound < self.accepted_dist_to_bounds:
+        lower_limits_reached = min_dist_to_lower_bound < self.accepted_dist_to_bounds
+        upper_limits_reached = min_dist_to_upper_bound < self.accepted_dist_to_bounds
+        if lower_limits_reached or upper_limits_reached:
             info_dict['state'] = HyQState.ApproachJointLimits
+            if lower_limits_reached:
+                min_dist_lower_index = numpy.argmin(abs(joint_angles - lower_bound))
+                print(f"Joint with index {min_dist_lower_index} approached lower joint limits, current value: {joint_angles[min_dist_lower_index]}")
+            else:
+                min_dist_upper_index = numpy.argmin(abs(joint_angles - upper_bound))
+                print(f"Joint with index {min_dist_upper_index} approached upper joint limits, current value: {joint_angles[min_dist_upper_index]}")
+
             return True, HyQState.ApproachJointLimits
+
+        if obs.trunk_contact:
+            return True, HyQState.Fallen
 
         # Didn't fail
         return False, HyQState.Undefined

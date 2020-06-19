@@ -13,19 +13,34 @@ from typing import Type
 #                       0.436332, 0.872665, 2.44346,
 #                       0.436332, 1.22173, -0.349066,
 #                       0.436332, 0.872665, 2.44346])
+action_array = numpy.array([[0,0,1,0,0,-1,0,0,1,0,0,-1],
+                           [0,0,1,0,0,-1,0,0,1,0,0,-1],
+                           [0,0,1,0,0,-1,0,0,1,0,0,-1],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,1,0,0,-1,0,0,1,0,0,-1],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,0,0,0,0,0,0,0,0,0,0],
+                           [0,0,0,0,0,0,0,0,0,0,0,0]])
 def main(args=None):
-    env: HyQEnv = gym.make('HyQ-v1')
+    env: HyQEnv = gym.make('HyQ-v2')
     action_space: Type[Box] = env.action_space
     done = False
+    i = 0
     for _ in range(10):
         print("-------------Starting----------------")
         count = 0
         while not done:
             # action = numpy.array([1.00, -1.01, 1.01])
-            action = action_space.sample()
+            action = action_array[i]
+            #action = action_space.sample()
             action_do_nothing = numpy.zeros((12,))
             observation, reward, done, info = env.step(action)
             # Type hints
+            i+=1
             observation: numpy.ndarray
             reward: float
             done: bool
