@@ -158,14 +158,15 @@ register(
             'robot_cls': HyQSim,
             'robot_kwargs': {
                 'use_gui': True,
-                'rtf': 6.0
+                'rtf': 0.0,
+                'control_mode': "Absolute"
             },
             'task_kwargs': {
                 'max_time_step': 1000,
                 'accepted_dist_to_bounds': 0.002,
                 'accepted_error': 0.05,
                 'reach_target_bonus_reward': 0.0,
-                'reach_bounds_penalty': 10.0,
+                'reach_bounds_penalty': 0.0,
                 'fall_penalty': 10.0,
                 'norm_rew_scaling': 100,
                 'exp_rew_scaling': 7.0,
@@ -205,14 +206,15 @@ register(
             'robot_cls': HyQSim,
             'robot_kwargs': {
                 'use_gui': True,
-                'rtf': 0.0
+                'rtf': 0.0,
+                'control_mode': "Absolute"
             },
             'task_kwargs': {
                 'max_time_step': 1000,
                 'accepted_dist_to_bounds': 0.002,
                 'accepted_error': 0.001,
                 'reach_target_bonus_reward': 0.0,
-                'reach_bounds_penalty': 10.0,
+                'reach_bounds_penalty': 0.0,
                 'fall_penalty': 10.0,
                 'norm_rew_scaling': None,
                 'exp_rew_scaling': None,

@@ -108,6 +108,10 @@ class HyQTask1:
     def is_done(self, obs: HyQObservation, observation_space: Box, time_step: int = -1) -> Tuple[bool, Dict]:
         failed, state = self.__is_failed(obs, observation_space, time_step)
         info_dict = {'state': state}
+        if state == HyQState.Fallen:
+            return False, info_dict
+        if state == HyQState.ApproachJointLimits:
+            return False, info_dict
         if failed:
             # self.fail_points.append((self.target_coords, self.target_coords_ik))
             if self.is_validation:
@@ -242,10 +246,10 @@ class HyQTask1:
             info_dict['state'] = HyQState.ApproachJointLimits
             if lower_limits_reached:
                 min_dist_lower_index = numpy.argmin(abs(joint_angles - lower_bound))
-                print(f"Joint with index {min_dist_lower_index} approached lower joint limits, current value: {joint_angles[min_dist_lower_index]}")
+                #print(f"Joint with index {min_dist_lower_index} approached lower joint limits, current value: {joint_angles[min_dist_lower_index]}")
             else:
                 min_dist_upper_index = numpy.argmin(abs(joint_angles - upper_bound))
-                print(f"Joint with index {min_dist_upper_index} approached upper joint limits, current value: {joint_angles[min_dist_upper_index]}")
+                #print(f"Joint with index {min_dist_upper_index} approached upper joint limits, current value: {joint_angles[min_dist_upper_index]}")
 
             return True, HyQState.ApproachJointLimits
 
@@ -316,11 +320,12 @@ class HyQTask1:
             yaw_penalty_factor = 1.0
         reward_info['yaw_penalty_factor'] = yaw_penalty_factor
         # Pitch penalty
-        allowable_pitch_deg = 5.0
+        allowable_pitch_deg = 1.0
         allowable_pitch_rad = allowable_pitch_deg * math.pi / 180
         # Note: This logic doesn't work well when yaw is beyond 90 degrees, because roll and pitch will flip sign and yaw will still be less than 90
         if abs(pitch) > allowable_pitch_rad:
-            pitch_penalty_factor = math.cos(pitch)
+            #pitch_penalty_factor = math.cos(pitch)
+            pitch_penalty_factor = 0.6
         else:
             pitch_penalty_factor = 1.0
         reward_info['pitch_penalty_factor'] = pitch_penalty_factor
@@ -328,7 +333,7 @@ class HyQTask1:
         # For height, we do not penalise for height between 0.42 and 0.47 (spawn height is 0.47 then dropped to 0.445 at steady state during ep start)
         penalty_scale_height = 1.0
         current_height = pose.position.z
-        if 0.45 < current_height < 0.75:
+        if 0.55 < current_height < 0.75:
             height_penalty_factor = 1.0
         else:
             height_diff = abs(0.6-current_height)
@@ -337,4 +342,4 @@ class HyQTask1:
         return pitch_penalty_factor * yaw_penalty_factor * height_penalty_factor
 
     def __get_target_coords(self) -> numpy.ndarray:
-        return numpy.array([5.0, 0.0, 0.5])
+        return numpy.array([5.0, 0.0, 0.6])

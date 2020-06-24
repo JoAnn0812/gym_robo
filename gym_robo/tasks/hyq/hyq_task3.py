@@ -119,6 +119,10 @@ class HyQTask3:
     def is_done(self, obs: HyQObservation, observation_space: Box, time_step: int = -1) -> Tuple[bool, Dict]:
         failed, state = self.__is_failed(obs, observation_space, time_step)
         info_dict = {'state': state}
+        if state == HyQState.Fallen:
+            return False, info_dict
+        if state == HyQState.ApproachJointLimits:
+            return False, info_dict
         if failed:
             # self.fail_points.append((self.target_coords, self.target_coords_ik))
             if self.is_validation:
@@ -162,17 +166,17 @@ class HyQTask3:
             #Get reward = 2 for 10 steps of [1,1,1,1], else reward = -2
             if self.foots4_count == 1:
                 if self.foots4_checker:
-                    reward = 4
+                    reward = 4.0
                 else:
-                    reward = -2
+                    reward = 0.0
                 self.foots4_checker = False
                 self.foots2_checker = False
             elif 1 < self.foots4_count <= 10:
-                reward = 2
+                reward = 2.0
                 if self.foots4_count == 10:
                     self.foots2_checker = True
             else:
-                reward = -2
+                reward = 0.0
         
         #2 foots(RF & LH) touched floor
         elif foot_flag == [0,1,0,1]:
@@ -184,25 +188,25 @@ class HyQTask3:
                 self.foots4_count = 0
                 self.lfoots2_count = 0
             #Get reward = 2 for 40 steps of [0,1,0,1], else reward = -2
-            if rfoots2_count == 1:
+            if self.rfoots2_count == 1:
                 if self.foots2_checker:
                     if self.rfoots2_checker:
-                        reward = 4
+                        reward = 4.0
                     else:
-                        reward = -2
+                        reward = 0.0
                 else:
-                    reward = -2
+                    reward = 0.0
                 self.foots4_checker = False
                 self.foots2_checker = False
                 self.rfoots2_checker = False
                 self.lfoots2_checker = False
             elif 1 < self.rfoots2_count <= 40:
-                reward = 2
+                reward = 2.0
                 if self.rfoots2_count == 40:
                     self.foots4_checker = True
                     self.lfoots2_checker = True
             else:
-                reward = -2
+                reward = 0.0
 
         #2 foots(LF & RH) touched floor
         elif foot_flag == [1,0,1,0]:
@@ -217,25 +221,25 @@ class HyQTask3:
             if self.lfoots2_count == 1:
                 if self.foots2_checker:
                     if self.lfoots2_checker:
-                        reward = 4
+                        reward = 4.0
                     else:
-                        reward = -2
+                        reward = 0.0
                 else:
-                    reward = -2
+                    reward = 0.0
                 self.foots4_checker = False
                 self.foots2_checker = False
                 self.rfoots2_checker = False
                 self.lfoots2_checker = False
             elif 1 < self.lfoots2_count <= 40:
-                reward = 2
+                reward = 2.0
                 if self.lfoots2_count == 40:
                     self.foots4_checker = True
                     self.rfoots2_checker = True
             else:
-                reward = -2
+                reward = 0.0
 
         else:
-            reward = -4
+            reward = 0.0
             self.foots4_checker = True
             self.foots2_checker = True
             self.lfoots2_checker = True
@@ -250,12 +254,16 @@ class HyQTask3:
 
         assert state != HyQState.Undefined, f'State cannot be undefined, please check logic'
 
-        reward1 = self.__calc_dist_change(self.previous_coords, current_coords)
+        within_region, reward1 = self.__calc_dist_change(self.previous_coords, current_coords)
 
         if reward1 > 0:
-            reward1 = 0
+            reward1 = 0.0
+
         # Scale up reward so that it is not so small if not normalised
         normal_scaled_reward = reward1 * 100
+
+        #if within_region:
+            #normal_scaled_reward = 1
 
         reward = reward + normal_scaled_reward
 
@@ -342,10 +350,10 @@ class HyQTask3:
             info_dict['state'] = HyQState.ApproachJointLimits
             if lower_limits_reached:
                 min_dist_lower_index = numpy.argmin(abs(joint_angles - lower_bound))
-                print(f"Joint with index {min_dist_lower_index} approached lower joint limits, current value: {joint_angles[min_dist_lower_index]}")
+                #print(f"Joint with index {min_dist_lower_index} approached lower joint limits, current value: {joint_angles[min_dist_lower_index]}")
             else:
                 min_dist_upper_index = numpy.argmin(abs(joint_angles - upper_bound))
-                print(f"Joint with index {min_dist_upper_index} approached upper joint limits, current value: {joint_angles[min_dist_upper_index]}")
+                #print(f"Joint with index {min_dist_upper_index} approached upper joint limits, current value: {joint_angles[min_dist_upper_index]}")
 
             return True, HyQState.ApproachJointLimits
 
@@ -361,9 +369,9 @@ class HyQTask3:
         diff_abs_init = numpy.linalg.norm(coords_init - self.target_coords)
         diff_abs_next = numpy.linalg.norm(coords_next - self.target_coords)
         if diff_abs_next > 0.10:
-            return diff_abs_init - diff_abs_next
+            return False, diff_abs_init - diff_abs_next
         else:
-            return 0.0
+            return True, 0.0
 
     def __calc_exponential_reward(self, coords_init: numpy.ndarray, coords_next: numpy.ndarray) -> float:
         def calc_cum_reward(dist: float, scaling=5.0):
